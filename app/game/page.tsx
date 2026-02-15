@@ -18,20 +18,22 @@ import { getCPUMove } from '@/lib/cpuPlayer';
 
 const CPU_DELAY_MS = 400;
 
-function parseModeAndPlayers(searchParams: ReturnType<typeof useSearchParams>): { mode: 'single' | 'multi'; numPlayers: 2 | 3 | 4; difficulty: number } {
+type GameMode = 'single' | 'two' | 'three' | 'four';
+
+function parseModeAndPlayers(searchParams: ReturnType<typeof useSearchParams>): { mode: 'single' | 'multi'; numPlayers: 2 | 3 | 4; difficulty: number; gameMode: GameMode } {
   const modeParam = searchParams.get('mode');
   const difficulty = Math.max(1, Math.min(10, Number(searchParams.get('difficulty')) || 5));
   if (modeParam === 'single') {
-    return { mode: 'single', numPlayers: 2, difficulty };
+    return { mode: 'single', numPlayers: 2, difficulty, gameMode: 'single' };
   }
-  if (modeParam === 'three') return { mode: 'multi', numPlayers: 3, difficulty: 5 };
-  if (modeParam === 'four') return { mode: 'multi', numPlayers: 4, difficulty: 5 };
-  return { mode: 'multi', numPlayers: 2, difficulty: 5 };
+  if (modeParam === 'three') return { mode: 'multi', numPlayers: 3, difficulty: 5, gameMode: 'three' };
+  if (modeParam === 'four') return { mode: 'multi', numPlayers: 4, difficulty: 5, gameMode: 'four' };
+  return { mode: 'multi', numPlayers: 2, difficulty: 5, gameMode: 'two' };
 }
 
 function GamePageContent() {
   const searchParams = useSearchParams();
-  const { mode, numPlayers, difficulty } = parseModeAndPlayers(searchParams);
+  const { mode, numPlayers, difficulty, gameMode } = parseModeAndPlayers(searchParams);
 
   const [state, setState] = useState<GameState>(() => createInitialState(numPlayers));
   const [cpuThinking, setCpuThinking] = useState(false);
@@ -79,6 +81,14 @@ function GamePageContent() {
     setState(createInitialState(numPlayers));
     setCpuThinking(false);
   }, [numPlayers]);
+
+  const handleLoadGame = useCallback(
+    (loaded: { state: GameState; mode: 'single' | 'two' | 'three' | 'four'; difficulty: number | null }) => {
+      setState(loaded.state);
+      setCpuThinking(false);
+    },
+    []
+  );
 
   const gameOver = state.gameOver !== null;
   const winner = state.gameOver === 'draw' ? 'draw' : state.gameOver;
@@ -128,6 +138,10 @@ function GamePageContent() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onRestart={handleRematch}
+        state={state}
+        gameMode={gameMode}
+        difficulty={difficulty}
+        onLoadGame={handleLoadGame}
       />
     </div>
   );
