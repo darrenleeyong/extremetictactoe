@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: 139 92 246; /* violet-500 */
+  --accent-hover: 124 58 237; /* violet-600 */
+  --accent-muted: 196 181 253; /* violet-300 */
+  --surface: 250 250 250; /* zinc-50 */
+  --surface-elevated: 255 255 255;
+}
+
+.dark {
+  --accent: 139 92 246;
+  --accent-hover: 167 139 250; /* violet-400 */
+  --accent-muted: 109 40 217; /* violet-700 */
+  --surface: 24 24 27; /* zinc-900 */
+  --surface-elevated: 39 39 42; /* zinc-800 */
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Use RGB vars for Tailwind arbitrary values */
+.bg-accent {
+  background-color: rgb(var(--accent));
+}
+.bg-accent-muted {
+  background-color: rgb(var(--accent-muted) / 0.2);
+}
+.bg-surface {
+  background-color: rgb(var(--surface));
+}
+.bg-surface-elevated {
+  background-color: rgb(var(--surface-elevated));
+}
+.text-accent {
+  color: rgb(var(--accent));
+}
