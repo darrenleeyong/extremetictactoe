@@ -80,17 +80,21 @@ export default function GameMenu({
       setLoadError(result.error);
       return;
     }
-    const restored = deserializeState(result.game.state);
-    onLoadGame({
-      state: restored,
-      mode: result.game.mode,
-      difficulty: result.game.difficulty,
-    });
-    onClose();
-    router.push(
-      `/game?mode=${result.game.mode}${result.game.difficulty != null ? `&difficulty=${result.game.difficulty}` : ''}`
-    );
-  }
+    if (result.game) {
+      const restored = deserializeState(result.game.state);
+      onLoadGame({
+        state: restored,
+        mode: result.game.mode,
+        difficulty: result.game.difficulty,
+      });
+
+      onClose();
+      
+      const difficultyParam = result.game.difficulty !== null ? `&difficulty=${result.game.difficulty}` : '';
+      router.push(
+        `/game?mode=${result.game.mode}${difficultyParam}`
+      );
+    }
 
   function closeLoadPhase() {
     setLoadPhase('idle');
