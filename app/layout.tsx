@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { ThemeRegistry } from '@/lib/ThemeContext';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -33,7 +34,9 @@ export default function RootLayout({
         <ThemeRegistry>
           <header className="flex-shrink-0 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur">
             <div className="flex items-center justify-between px-4 py-3 max-w-screen-sm mx-auto">
-              <span className="font-semibold text-lg tracking-tight">Extreme Tic Tac Toe</span>
+              <Link href="/" className="font-semibold text-lg tracking-tight text-zinc-900 dark:text-zinc-100 hover:opacity-80 transition-opacity">
+                Extreme Tic Tac Toe
+              </Link>
               <div className="flex items-center gap-3">
                 <HeaderAuth />
                 <ThemeToggle />
