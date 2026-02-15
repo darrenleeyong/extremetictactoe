@@ -2,7 +2,7 @@ import type { GameState } from '@/lib/gameLogic';
 import { serializeState, type SerializedState } from '@/lib/gameState';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type GameMode = 'single' | 'two' | 'three' | 'four';
+export type GameMode = 'single' | 'two' | 'three' | 'four' | 'hell';
 
 export type SavedGame = {
   id: string;

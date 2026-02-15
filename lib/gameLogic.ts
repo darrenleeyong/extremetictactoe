@@ -128,6 +128,14 @@ export function applyMove(
   if (state.globalWins[boardIndex] !== null) return state;
   if (state.gameOver !== null) return state;
 
+  // Enforce nextBoard constraint: must play in the designated board if it's still playable
+  if (state.nextBoard !== null && state.nextBoard !== boardIndex) {
+    const nb = state.nextBoard;
+    if (state.globalWins[nb] === null && !isSmallBoardFull(state.boards[nb])) {
+      return state;
+    }
+  }
+
   const currentPlayer = getCurrentPlayer(state);
   const nextBoard = [...state.boards] as SmallBoard[];
   const newSmall = [...board] as SmallBoard;

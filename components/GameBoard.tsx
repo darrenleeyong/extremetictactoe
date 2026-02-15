@@ -29,8 +29,10 @@ export default function GameBoard({ state, onCellClick }: GameBoardProps) {
             const wonBy = globalWins[boardIndex];
             const board = boards[boardIndex];
             const tied = isSmallBoardFull(board) && wonBy === null;
-            const disabled = wonBy !== null || tied || gameOver !== null;
             const isTarget = nextBoard === boardIndex && gameOver === null;
+            const mustPlayInOther = gameOver === null && nextBoard !== null && nextBoard !== boardIndex &&
+              globalWins[nextBoard] === null && !isSmallBoardFull(boards[nextBoard]);
+            const disabled = wonBy !== null || tied || gameOver !== null || mustPlayInOther;
             return (
               <div key={boardIndex} className="flex justify-center">
                 <div className="w-full max-w-[130px]">
