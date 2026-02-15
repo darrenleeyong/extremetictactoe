@@ -95,6 +95,7 @@ export default function GameMenu({
         `/game?mode=${result.game.mode}${difficultyParam}`
       );
     }
+  }
 
   function closeLoadPhase() {
     setLoadPhase('idle');
