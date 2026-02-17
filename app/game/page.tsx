@@ -16,6 +16,7 @@ import {
   type Player,
 } from '@/lib/gameLogic';
 import { getCPUMove } from '@/lib/cpuPlayer';
+import { useCPUWorker } from '@/lib/useCPUWorker';
 import { calculateScore } from '@/lib/scoring';
 
 const CPU_DELAY_MS = 400;
@@ -48,9 +49,27 @@ function GamePageContent() {
   const searchParams = useSearchParams();
   const { mode, numPlayers, difficulty, gameMode, isHellMode } = parseModeAndPlayers(searchParams);
 
-  const [state, setState] = useState<GameState>(() => createInitialState(numPlayers));
+  // Randomize player assignments at start
+  const [playerAssignment] = useState(() => {
+    if (mode === 'single') {
+      // Randomly assign user as X or O
+      const isUserX = Math.random() < 0.5;
+      return {
+        userPlayer: isUserX ? 'X' : 'O',
+        cpuPlayer: isUserX ? 'O' : 'X',
+        userIndex: isUserX ? 0 : 1,
+        cpuIndex: isUserX ? 1 : 0,
+      };
+    }
+    return null;
+  });
+
+  const [state, setState] = useState<GameState>(() => createInitialState(numPlayers, true));
   const [cpuThinking, setCpuThinking] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Use Web Worker for high-level AI (Levels 7-10)
+  const { getCPUMove: getWorkerMove } = useCPUWorker();
 
   // Scoring / tracking state
   const [playerMoves, setPlayerMoves] = useState(0);
@@ -61,6 +80,16 @@ function GamePageContent() {
   const [timeLeft, setTimeLeft] = useState(HELL_TURN_SECONDS);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Handle CPU going first (when randomly assigned to start)
+  useEffect(() => {
+    if (mode !== 'single' || !playerAssignment) return;
+    if (state.gameOver !== null) return;
+    if (state.currentPlayerIndex === playerAssignment.cpuIndex && !cpuThinking) {
+      setCpuThinking(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   // Track elapsed time (updates every second for live score display)
   useEffect(() => {
@@ -91,24 +120,30 @@ function GamePageContent() {
     return { counts, tied, symbols };
   }, [state.globalWins, state.boards, numPlayers]);
 
+  // Determine if CPU should move (single player only)
+  const isCPUTurn = mode === 'single' && playerAssignment && state.currentPlayerIndex === playerAssignment.cpuIndex;
+
   // Calculate live points (single player only)
   const livePoints = useMemo(() => {
-    if (mode !== 'single') return null;
+    if (mode !== 'single' || !playerAssignment) return null;
     return calculateScore({
       playerMoves,
       totalSeconds: elapsed,
-      boardsWon: score.counts['X'],
-      boardsLost: score.counts['O'],
-      result: state.gameOver === 'X' ? 'win' : state.gameOver === 'O' ? 'loss' : state.gameOver === 'draw' ? 'draw' : null,
+      boardsWon: score.counts[playerAssignment.userPlayer as Player],
+      boardsLost: score.counts[playerAssignment.cpuPlayer as Player],
+      result: state.gameOver === playerAssignment.userPlayer ? 'win' : state.gameOver === playerAssignment.cpuPlayer ? 'loss' : state.gameOver === 'draw' ? 'draw' : null,
       difficulty,
       isHellMode,
     });
-  }, [mode, playerMoves, elapsed, score.counts, state.gameOver, difficulty, isHellMode]);
+  }, [mode, playerMoves, elapsed, score.counts, state.gameOver, difficulty, isHellMode, playerAssignment]);
 
   const handleCellClick = useCallback(
     (bigRow: number, bigCol: number, smallRow: number, smallCol: number) => {
       if (state.gameOver !== null || cpuThinking) return;
-      if (mode === 'single' && getCurrentPlayer(state) !== 'X') return;
+      
+      // In single player, only allow clicks when it's the user's turn
+      if (mode === 'single' && playerAssignment && state.currentPlayerIndex !== playerAssignment.userIndex) return;
+      
       const next = applyMove(state, bigRow, bigCol, smallRow, smallCol);
       if (next === state) return; // Move was invalid (wrong board, occupied cell, etc.)
       setState(next);
@@ -117,30 +152,70 @@ function GamePageContent() {
         setPlayerMoves((prev) => prev + 1);
       }
 
-      if (mode === 'single' && next.gameOver === null && getCurrentPlayer(next) === 'O') {
+      // Check if CPU should move next
+      if (mode === 'single' && playerAssignment && next.gameOver === null && next.currentPlayerIndex === playerAssignment.cpuIndex) {
         setCpuThinking(true);
       }
     },
-    [state, mode, cpuThinking]
+    [state, mode, cpuThinking, playerAssignment]
   );
 
   // CPU move effect
   useEffect(() => {
-    if (mode !== 'single' || state.currentPlayerIndex !== 1 || state.gameOver !== null || cpuThinking === false)
-      return;
-    const timer = setTimeout(() => {
-      const move = getCPUMove(state, difficulty);
-      const next = applyMove(state, move.bigRow, move.bigCol, move.smallRow, move.smallCol);
-      setState(next);
-      setCpuThinking(false);
+    if (!cpuThinking || !isCPUTurn || state.gameOver !== null || !playerAssignment) return;
+
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      try {
+        let move;
+
+        // Use Web Worker for levels 7-10, direct call for 1-6
+        if (difficulty >= 7) {
+          move = await getWorkerMove(
+            state,
+            difficulty,
+            playerAssignment.cpuPlayer as Player,
+            playerAssignment.userPlayer as Player
+          );
+        } else {
+          move = getCPUMove(
+            state,
+            difficulty,
+            playerAssignment.cpuPlayer as Player,
+            playerAssignment.userPlayer as Player
+          );
+        }
+
+        if (cancelled) return;
+        const next = applyMove(state, move.bigRow, move.bigCol, move.smallRow, move.smallCol);
+        setState(next);
+        setCpuThinking(false);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('CPU move error, using fallback:', error);
+        const move = getCPUMove(
+          state,
+          difficulty,
+          playerAssignment.cpuPlayer as Player,
+          playerAssignment.userPlayer as Player
+        );
+        const next = applyMove(state, move.bigRow, move.bigCol, move.smallRow, move.smallCol);
+        setState(next);
+        setCpuThinking(false);
+      }
     }, CPU_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [mode, state.currentPlayerIndex, state.gameOver, cpuThinking, state, difficulty]);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [cpuThinking, isCPUTurn, state, difficulty, playerAssignment, getWorkerMove]);
 
   // Hell mode timer effect
   useEffect(() => {
-    if (!isHellMode || state.gameOver !== null || cpuThinking) return;
-    if (state.currentPlayerIndex !== 0) return; // Only time the human player
+    if (!isHellMode || state.gameOver !== null || cpuThinking || !playerAssignment) return;
+    if (state.currentPlayerIndex !== playerAssignment.userIndex) return; // Only time the human player
 
     const start = Date.now();
     setTimeLeft(HELL_TURN_SECONDS);
@@ -153,14 +228,14 @@ function GamePageContent() {
         clearInterval(interval);
         // Time's up: make a random legal move for the human
         const currentState = stateRef.current;
-        if (currentState.gameOver !== null || currentState.currentPlayerIndex !== 0) return;
+        if (currentState.gameOver !== null || currentState.currentPlayerIndex !== playerAssignment.userIndex) return;
         const moves = getLegalMoves(currentState);
         if (moves.length > 0) {
           const randomMove = moves[Math.floor(Math.random() * moves.length)];
           const next = applyMove(currentState, randomMove.bigRow, randomMove.bigCol, randomMove.smallRow, randomMove.smallCol);
           setState(next);
           setPlayerMoves((prev) => prev + 1);
-          if (next.gameOver === null && getCurrentPlayer(next) === 'O') {
+          if (next.gameOver === null && next.currentPlayerIndex === playerAssignment.cpuIndex) {
             setCpuThinking(true);
           }
         }
@@ -168,16 +243,23 @@ function GamePageContent() {
     }, 50);
 
     return () => clearInterval(interval);
-  }, [isHellMode, state.currentPlayerIndex, state.gameOver, cpuThinking]);
+  }, [isHellMode, state.currentPlayerIndex, state.gameOver, cpuThinking, playerAssignment]);
 
   const handleRematch = useCallback(() => {
-    setState(createInitialState(numPlayers));
-    setCpuThinking(false);
+    const newState = createInitialState(numPlayers, true);
+    setState(newState);
     setPlayerMoves(0);
     setStartTime(Date.now());
     setElapsed(0);
     setTimeLeft(HELL_TURN_SECONDS);
-  }, [numPlayers]);
+
+    // If CPU goes first in the new game, trigger its move
+    if (playerAssignment && newState.currentPlayerIndex === playerAssignment.cpuIndex) {
+      setCpuThinking(true);
+    } else {
+      setCpuThinking(false);
+    }
+  }, [numPlayers, playerAssignment]);
 
   const handleLoadGame = useCallback(
     (loaded: { state: GameState; mode: 'single' | 'two' | 'three' | 'four' | 'hell'; difficulty: number | null }) => {
@@ -195,10 +277,10 @@ function GamePageContent() {
   const hasFilledBoards = score.symbols.some((s) => score.counts[s] > 0) || score.tied > 0;
 
   const isSinglePlayer = mode === 'single';
-  const statusLine = isSinglePlayer
+  const statusLine = isSinglePlayer && playerAssignment
     ? isHellMode
-      ? `HELL MODE · Level 10`
-      : `You are X · CPU is O · Level ${difficulty}`
+      ? `HELL MODE · You are ${playerAssignment.userPlayer} · Level 10`
+      : `You are ${playerAssignment.userPlayer} · CPU is ${playerAssignment.cpuPlayer} · Level ${difficulty}`
     : score.symbols.join(' · ') + ' (same device)';
 
   const formatTime = (s: number) => {
@@ -208,13 +290,13 @@ function GamePageContent() {
   };
 
   // Game stats for leaderboard submission
-  const gameStats = isSinglePlayer
+  const gameStats = isSinglePlayer && playerAssignment
     ? {
         mode: gameMode,
         difficulty,
         playerMoves,
         totalSeconds: elapsed,
-        result: (state.gameOver === 'X' ? 'win' : state.gameOver === 'O' ? 'loss' : 'draw') as 'win' | 'loss' | 'draw',
+        result: (state.gameOver === playerAssignment.userPlayer ? 'win' : state.gameOver === playerAssignment.cpuPlayer ? 'loss' : 'draw') as 'win' | 'loss' | 'draw',
       }
     : null;
 
@@ -268,7 +350,7 @@ function GamePageContent() {
           </div>
 
           {/* Hell mode countdown timer */}
-          {isHellMode && !gameOver && state.currentPlayerIndex === 0 && !cpuThinking && (
+          {isHellMode && !gameOver && playerAssignment && state.currentPlayerIndex === playerAssignment.userIndex && !cpuThinking && (
             <div className="mt-1.5">
               <div className="relative h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
                 <div

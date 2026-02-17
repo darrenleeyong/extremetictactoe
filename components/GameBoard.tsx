@@ -10,15 +10,17 @@ interface GameBoardProps {
 }
 
 export default function GameBoard({ state, onCellClick }: GameBoardProps) {
-  const { boards, globalWins, nextBoard, gameOver } = state;
+  const { boards, globalWins, nextBoard, gameOver, hasWildcard } = state;
   const currentPlayer = getCurrentPlayer(state);
 
   return (
     <div className="w-full max-w-[420px] mx-auto">
       {!gameOver && (
         <p className="text-center text-sm text-zinc-600 dark:text-zinc-400 mb-2">
-          {nextBoard !== null
-            ? `Play in the highlighted board (${currentPlayer}'s turn)`
+          {hasWildcard
+            ? `🎯 Wildcard: Choose any board! (${currentPlayer}'s turn)`
+            : nextBoard !== null
+            ? `Board ${(nextBoard + 1)} is active (${currentPlayer}'s turn)`
             : `Choose any board (${currentPlayer}'s turn)`}
         </p>
       )}
@@ -29,10 +31,17 @@ export default function GameBoard({ state, onCellClick }: GameBoardProps) {
             const wonBy = globalWins[boardIndex];
             const board = boards[boardIndex];
             const tied = isSmallBoardFull(board) && wonBy === null;
-            const isTarget = nextBoard === boardIndex && gameOver === null;
-            const mustPlayInOther = gameOver === null && nextBoard !== null && nextBoard !== boardIndex &&
+            const boardComplete = wonBy !== null || tied;
+
+            // Highlight the active board (not during wildcard — all are valid then)
+            const isTarget = !hasWildcard && nextBoard === boardIndex && gameOver === null;
+
+            // During wildcard, all incomplete boards are playable
+            // Otherwise, only the sequenced board is playable
+            const mustPlayInOther = gameOver === null && !hasWildcard &&
+              nextBoard !== null && nextBoard !== boardIndex &&
               globalWins[nextBoard] === null && !isSmallBoardFull(boards[nextBoard]);
-            const disabled = wonBy !== null || tied || gameOver !== null || mustPlayInOther;
+            const disabled = boardComplete || gameOver !== null || mustPlayInOther;
             return (
               <div key={boardIndex} className="flex justify-center">
                 <div className="w-full max-w-[130px]">

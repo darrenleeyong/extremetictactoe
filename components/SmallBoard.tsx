@@ -33,6 +33,7 @@ function cellColorClass(cell: CellValue): string {
 }
 
 export default function SmallBoard({
+  boardIndex,
   board,
   wonBy,
   isTied,
@@ -45,12 +46,21 @@ export default function SmallBoard({
   const bgClass = boardBgClass(wonBy, isTied, isTarget);
 
   return (
-    <div
-      className={`
-        grid grid-cols-3 gap-0.5 aspect-square p-0.5 rounded-lg border-2 ${bgClass}
-        ${disabled ? 'opacity-90' : ''}
-      `}
-    >
+    <div className="relative">
+      {/* Board number indicator */}
+      <div className="absolute -top-1 -left-1 z-10 w-5 h-5 rounded-full bg-zinc-300 dark:bg-zinc-700 border border-zinc-400 dark:border-zinc-600 flex items-center justify-center">
+        <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
+          {boardIndex + 1}
+        </span>
+      </div>
+      
+      <div
+        className={`
+          grid grid-cols-3 gap-0.5 aspect-square p-0.5 rounded-lg border-2 ${bgClass}
+          ${disabled ? 'opacity-90' : ''}
+          ${isTarget ? 'ring-2 ring-violet-500 dark:ring-violet-400 ring-offset-1' : ''}
+        `}
+      >
       {board.map((cell, i) => {
         const smallRow = Math.floor(i / 3);
         const smallCol = i % 3;
@@ -72,6 +82,7 @@ export default function SmallBoard({
           </button>
         );
       })}
+      </div>
     </div>
   );
 }

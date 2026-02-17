@@ -10,6 +10,8 @@ export type SerializedState = {
   numPlayers: 2 | 3 | 4;
   currentPlayerIndex: number;
   gameOver: Player | 'draw' | null;
+  sequencePosition: number;
+  hasWildcard: boolean;
 };
 
 function isPlayer(x: unknown): x is Player {
@@ -39,6 +41,8 @@ export function serializeState(state: GameState): SerializedState {
     numPlayers: state.numPlayers,
     currentPlayerIndex: state.currentPlayerIndex,
     gameOver: state.gameOver,
+    sequencePosition: state.sequencePosition,
+    hasWildcard: state.hasWildcard,
   };
 }
 
@@ -79,6 +83,10 @@ export function deserializeState(json: unknown): GameState {
     throw new Error('Invalid game state: gameOver');
   }
 
+  // Handle new fields with backward compatibility
+  const sequencePosition = typeof obj.sequencePosition === 'number' ? obj.sequencePosition : 0;
+  const hasWildcard = typeof obj.hasWildcard === 'boolean' ? obj.hasWildcard : false;
+
   return {
     boards,
     globalWins,
@@ -86,5 +94,7 @@ export function deserializeState(json: unknown): GameState {
     numPlayers: numPlayers as 2 | 3 | 4,
     currentPlayerIndex,
     gameOver: gameOver as GameState['gameOver'],
+    sequencePosition,
+    hasWildcard,
   };
 }

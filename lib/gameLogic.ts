@@ -23,6 +23,10 @@ export interface GameState {
   currentPlayerIndex: number;
   /** null = game ongoing, Player = winner, 'draw' = draw */
   gameOver: Player | 'draw' | null;
+  /** Current position in the sequential board progression (0-8) */
+  sequencePosition: number;
+  /** If true, current player has wildcard choice (any incomplete board) */
+  hasWildcard: boolean;
 }
 
 /** Current player symbol for this state */
@@ -67,6 +71,19 @@ export function isBoardPlayable(globalWins: GlobalWins, boardIndex: number): boo
   return true;
 }
 
+/** Sequential board order: 0->1->2->3->4->5->6->7->8 (looping) */
+const BOARD_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+/** Get the next board index in the sequence */
+export function getNextSequencePosition(currentPos: number): number {
+  return (currentPos + 1) % 9;
+}
+
+/** Get the board index at a given sequence position */
+export function getBoardAtSequence(position: number): number {
+  return BOARD_SEQUENCE[position];
+}
+
 function getEmptyCellsInBoard(board: SmallBoard): number[] {
   const out: number[] = [];
   for (let i = 0; i < 9; i++) if (board[i] === null) out.push(i);
@@ -78,13 +95,24 @@ export function getLegalMoves(state: GameState): { bigRow: number; bigCol: numbe
   if (state.gameOver !== null) return [];
 
   const moves: { bigRow: number; bigCol: number; smallRow: number; smallCol: number }[] = [];
-  const { nextBoard, boards, globalWins } = state;
-  const currentPlayer = getCurrentPlayer(state);
+  const { boards, globalWins, sequencePosition, hasWildcard } = state;
 
-  const boardIndices: number[] =
-    nextBoard !== null && isBoardPlayable(globalWins, nextBoard)
-      ? [nextBoard]
-      : [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => isBoardPlayable(globalWins, i));
+  let boardIndices: number[];
+  
+  if (hasWildcard) {
+    // Player has wildcard: can play in any incomplete board
+    boardIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => isBoardPlayable(globalWins, i) && !isSmallBoardFull(boards[i]));
+  } else {
+    // Must follow sequence: play in the board at current sequence position
+    const targetBoard = getBoardAtSequence(sequencePosition);
+    if (isBoardPlayable(globalWins, targetBoard) && !isSmallBoardFull(boards[targetBoard])) {
+      boardIndices = [targetBoard];
+    } else {
+      // If sequence board is not playable, skip to next in sequence
+      // This handles edge cases but shouldn't happen often
+      boardIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => isBoardPlayable(globalWins, i) && !isSmallBoardFull(boards[i]));
+    }
+  }
 
   for (const bi of boardIndices) {
     const board = boards[bi];
@@ -100,17 +128,23 @@ export function getLegalMoves(state: GameState): { bigRow: number; bigCol: numbe
   return moves;
 }
 
-export function createInitialState(numPlayers: 2 | 3 | 4 = 2): GameState {
+export function createInitialState(numPlayers: 2 | 3 | 4 = 2, randomStart: boolean = false): GameState {
   const emptyBoard: SmallBoard = [null, null, null, null, null, null, null, null, null];
+  
+  // Randomize starting player if requested
+  const startingPlayerIndex = randomStart ? Math.floor(Math.random() * numPlayers) : 0;
+  
   return {
     boards: Array(9)
       .fill(null)
       .map(() => [...emptyBoard] as SmallBoard),
     globalWins: Array(9).fill(null),
-    nextBoard: null,
+    nextBoard: 0, // Start at board 0 in the sequence
     numPlayers,
-    currentPlayerIndex: 0,
+    currentPlayerIndex: startingPlayerIndex,
     gameOver: null,
+    sequencePosition: 0, // Start at position 0 in sequence
+    hasWildcard: false, // No wildcard at start
   };
 }
 
@@ -124,48 +158,95 @@ export function applyMove(
   const boardIndex = bigRow * 3 + bigCol;
   const cellIndex = smallRow * 3 + smallCol;
   const board = state.boards[boardIndex];
+  
+  // Validation checks
   if (board[cellIndex] !== null) return state;
   if (state.globalWins[boardIndex] !== null) return state;
   if (state.gameOver !== null) return state;
 
-  // Enforce nextBoard constraint: must play in the designated board if it's still playable
-  if (state.nextBoard !== null && state.nextBoard !== boardIndex) {
-    const nb = state.nextBoard;
-    if (state.globalWins[nb] === null && !isSmallBoardFull(state.boards[nb])) {
-      return state;
+  // Enforce sequential rule: must play in correct board unless has wildcard
+  if (!state.hasWildcard) {
+    const expectedBoard = getBoardAtSequence(state.sequencePosition);
+    if (boardIndex !== expectedBoard) {
+      // Check if expected board is still playable
+      if (state.globalWins[expectedBoard] === null && !isSmallBoardFull(state.boards[expectedBoard])) {
+        return state; // Invalid move
+      }
     }
   }
 
   const currentPlayer = getCurrentPlayer(state);
-  const nextBoard = [...state.boards] as SmallBoard[];
+  const nextBoards = [...state.boards] as SmallBoard[];
   const newSmall = [...board] as SmallBoard;
   newSmall[cellIndex] = currentPlayer;
-  nextBoard[boardIndex] = newSmall;
+  nextBoards[boardIndex] = newSmall;
 
   const nextGlobalWins = [...state.globalWins];
   const smallWinner = checkSmallBoardWin(newSmall);
   if (smallWinner) nextGlobalWins[boardIndex] = smallWinner;
 
+  const boardCompleted = smallWinner !== null || isSmallBoardFull(newSmall);
   const globalWinner = checkGlobalWin(nextGlobalWins);
-  const nextBoardConstraint = smallWinner !== null || isSmallBoardFull(newSmall) ? null : cellIndex;
   const nextPlayerIndex = (state.currentPlayerIndex + 1) % state.numPlayers;
 
-  const legalMoves = getLegalMoves({
-    ...state,
-    boards: nextBoard,
-    globalWins: nextGlobalWins,
-    nextBoard: nextBoardConstraint,
-    currentPlayerIndex: nextPlayerIndex,
-    gameOver: null,
-  });
-  const isDraw = globalWinner === null && legalMoves.length === 0;
+  // Determine next sequence position and wildcard status
+  let nextSequencePosition: number;
+  let nextHasWildcard: boolean;
+  let nextBoardIndex: number | null;
 
-  return {
-    boards: nextBoard,
+  if (boardCompleted) {
+    // Board was completed: next player gets wildcard
+    nextHasWildcard = true;
+    nextSequencePosition = state.sequencePosition; // Keep position, will update after wildcard is used
+    nextBoardIndex = null; // Will be determined by wildcard choice
+  } else if (state.hasWildcard) {
+    // Wildcard was used: resume sequence from chosen board
+    nextHasWildcard = false;
+    // Find the position of the chosen board in the sequence
+    nextSequencePosition = BOARD_SEQUENCE.indexOf(boardIndex);
+    // Advance to next in sequence
+    nextSequencePosition = getNextSequencePosition(nextSequencePosition);
+    nextBoardIndex = getBoardAtSequence(nextSequencePosition);
+  } else {
+    // Normal sequence progression
+    nextHasWildcard = false;
+    nextSequencePosition = getNextSequencePosition(state.sequencePosition);
+    nextBoardIndex = getBoardAtSequence(nextSequencePosition);
+  }
+
+  // If next board is not playable, keep advancing sequence until we find one
+  while (nextBoardIndex !== null && !nextHasWildcard) {
+    if (nextGlobalWins[nextBoardIndex] === null && !isSmallBoardFull(nextBoards[nextBoardIndex])) {
+      break; // Found playable board
+    }
+    nextSequencePosition = getNextSequencePosition(nextSequencePosition);
+    nextBoardIndex = getBoardAtSequence(nextSequencePosition);
+    
+    // Safety check: if we've looped through all boards, give wildcard
+    const allComplete = nextGlobalWins.every((w, i) => w !== null || isSmallBoardFull(nextBoards[i]));
+    if (allComplete) {
+      nextHasWildcard = true;
+      nextBoardIndex = null;
+      break;
+    }
+  }
+
+  const newState: GameState = {
+    boards: nextBoards,
     globalWins: nextGlobalWins,
-    nextBoard: nextBoardConstraint,
+    nextBoard: nextBoardIndex,
     numPlayers: state.numPlayers,
     currentPlayerIndex: nextPlayerIndex,
-    gameOver: globalWinner ?? (isDraw ? 'draw' : null),
+    gameOver: null,
+    sequencePosition: nextSequencePosition,
+    hasWildcard: nextHasWildcard,
   };
+
+  // Check for draw
+  const legalMoves = getLegalMoves(newState);
+  const isDraw = globalWinner === null && legalMoves.length === 0;
+
+  newState.gameOver = globalWinner ?? (isDraw ? 'draw' : null);
+
+  return newState;
 }
