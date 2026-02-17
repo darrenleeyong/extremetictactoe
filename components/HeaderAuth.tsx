@@ -52,6 +52,7 @@ export default function HeaderAuth() {
         <button
           type="button"
           onClick={handleSignOut}
+          aria-label="Sign out"
           className="text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
         >
           Sign out

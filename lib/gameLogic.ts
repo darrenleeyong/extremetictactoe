@@ -16,6 +16,13 @@ export const BOARD_NAMES = [
   'Bot-Left', 'Bot-Center', 'Bot-Right',
 ] as const;
 
+/** Cell position names within a small board (same 3x3 layout) */
+export const CELL_NAMES = [
+  'top-left', 'top-center', 'top-right',
+  'mid-left', 'center', 'mid-right',
+  'bottom-left', 'bottom-center', 'bottom-right',
+] as const;
+
 /** nextBoard: 0..8 = must play in that small board; null = play anywhere */
 export interface GameState {
   /** 9 small boards, row-major (bigRow * 3 + bigCol) */

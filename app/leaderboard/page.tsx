@@ -70,7 +70,7 @@ export default function LeaderboardPage() {
             className="p-2 -ml-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             aria-label="Back to home"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
               <path fillRule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clipRule="evenodd" />
             </svg>
           </Link>
@@ -80,9 +80,9 @@ export default function LeaderboardPage() {
           type="button"
           onClick={fetchLeaderboard}
           className="p-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-          aria-label="Refresh"
+          aria-label="Refresh leaderboard"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
             <path fillRule="evenodd" d="M4.755 10.059a7.5 7.5 0 0112.548-3.364l1.903 1.903H14.25a.75.75 0 000 1.5h6a.75.75 0 00.75-.75v-6a.75.75 0 00-1.5 0v3.068l-1.961-1.96A9 9 0 002.342 9.66a.75.75 0 101.416.494l.001-.003a7.47 7.47 0 01.996-.092zm14.49 3.882a7.5 7.5 0 01-12.548 3.364l-1.902-1.903h4.955a.75.75 0 000-1.5h-6a.75.75 0 00-.75.75v6a.75.75 0 001.5 0v-3.068l1.96 1.96A9 9 0 0021.66 14.34a.75.75 0 10-1.416-.494 7.47 7.47 0 01-.998.095z" clipRule="evenodd" />
           </svg>
         </button>

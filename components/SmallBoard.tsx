@@ -1,6 +1,7 @@
 'use client';
 
 import type { SmallBoard as SmallBoardType, CellValue } from '@/lib/gameLogic';
+import { BOARD_NAMES, CELL_NAMES } from '@/lib/gameLogic';
 
 interface SmallBoardProps {
   boardIndex: number;
@@ -65,12 +66,18 @@ export default function SmallBoard({
         const smallRow = Math.floor(i / 3);
         const smallCol = i % 3;
         const cellDisabled = disabled || cell !== null;
+        const boardName = BOARD_NAMES[boardIndex];
+        const cellName = CELL_NAMES[i];
+        const ariaLabel = cellDisabled
+          ? `Board ${boardIndex + 1} ${boardName}, cell ${cellName}, ${cell ? `occupied by ${cell}` : 'tied or completed'}`
+          : `Board ${boardIndex + 1} ${boardName}, cell ${cellName}, empty, play here`;
         return (
           <button
             key={i}
             type="button"
             onClick={() => !cellDisabled && onCellClick(bigRow, bigCol, smallRow, smallCol)}
             disabled={cellDisabled}
+            aria-label={ariaLabel}
             className={`
               min-h-[44px] min-w-[44px] flex items-center justify-center text-xs sm:text-base font-bold
               rounded border border-zinc-200 dark:border-zinc-600

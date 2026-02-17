@@ -301,7 +301,7 @@ function GamePageContent() {
     : null;
 
   return (
-    <div className="flex-1 flex flex-col py-4 px-2 max-w-sm mx-auto w-full">
+    <article className="flex-1 flex flex-col py-4 px-2 max-w-sm mx-auto w-full" aria-label="Game board">
       {/* Status bar */}
       <div className="flex items-center justify-between mb-2 px-1">
         <div className="flex-1 flex justify-center min-w-0">
@@ -326,7 +326,7 @@ function GamePageContent() {
           aria-label="Open menu"
           className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 ml-1 transition-colors"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
             <path fillRule="evenodd" d="M3 6.75A.75.75 0 013.75 6h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 6.75zM3 12a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 12zm0 5.25a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
           </svg>
         </button>
@@ -379,9 +379,9 @@ function GamePageContent() {
       )}
 
       {/* Game board */}
-      <div className="flex-1 flex items-center justify-center">
+      <section className="flex-1 flex items-center justify-center" aria-label="Extreme Tic Tac Toe game board">
         <GameBoard state={state} onCellClick={handleCellClick} />
-      </div>
+      </section>
 
       {/* Game over dialog */}
       <GameOverDialog
@@ -403,7 +403,7 @@ function GamePageContent() {
         difficulty={difficulty}
         onLoadGame={handleLoadGame}
       />
-    </div>
+    </article>
   );
 }
 
