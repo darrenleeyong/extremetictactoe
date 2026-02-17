@@ -1,8 +1,9 @@
 'use client';
 
 import SmallBoard from './SmallBoard';
+import BoardStepper from './BoardStepper';
 import type { GameState } from '@/lib/gameLogic';
-import { isSmallBoardFull, getCurrentPlayer } from '@/lib/gameLogic';
+import { isSmallBoardFull, getCurrentPlayer, BOARD_NAMES } from '@/lib/gameLogic';
 
 interface GameBoardProps {
   state: GameState;
@@ -15,12 +16,15 @@ export default function GameBoard({ state, onCellClick }: GameBoardProps) {
 
   return (
     <div className="w-full max-w-[420px] mx-auto">
+      {/* Board sequence stepper */}
+      <BoardStepper state={state} />
+
       {!gameOver && (
         <p className="text-center text-sm text-zinc-600 dark:text-zinc-400 mb-2">
           {hasWildcard
             ? `🎯 Wildcard: Choose any board! (${currentPlayer}'s turn)`
             : nextBoard !== null
-            ? `Board ${(nextBoard + 1)} is active (${currentPlayer}'s turn)`
+            ? `Board ${nextBoard + 1} · ${BOARD_NAMES[nextBoard]} (${currentPlayer}'s turn)`
             : `Choose any board (${currentPlayer}'s turn)`}
         </p>
       )}

@@ -10,8 +10,9 @@ export type SerializedState = {
   numPlayers: 2 | 3 | 4;
   currentPlayerIndex: number;
   gameOver: Player | 'draw' | null;
-  sequencePosition: number;
+  queuePosition: number;
   hasWildcard: boolean;
+  masterQueue: number[];
 };
 
 function isPlayer(x: unknown): x is Player {
@@ -41,8 +42,9 @@ export function serializeState(state: GameState): SerializedState {
     numPlayers: state.numPlayers,
     currentPlayerIndex: state.currentPlayerIndex,
     gameOver: state.gameOver,
-    sequencePosition: state.sequencePosition,
+    queuePosition: state.queuePosition,
     hasWildcard: state.hasWildcard,
+    masterQueue: [...state.masterQueue],
   };
 }
 
@@ -84,8 +86,27 @@ export function deserializeState(json: unknown): GameState {
   }
 
   // Handle new fields with backward compatibility
-  const sequencePosition = typeof obj.sequencePosition === 'number' ? obj.sequencePosition : 0;
+  const queuePosition = typeof obj.queuePosition === 'number'
+    ? obj.queuePosition
+    : typeof obj.sequencePosition === 'number'
+      ? obj.sequencePosition
+      : 0;
   const hasWildcard = typeof obj.hasWildcard === 'boolean' ? obj.hasWildcard : false;
+  
+  // Backward compat: accept masterQueue (81 items) or old masterSequence (9 items, expand to 81)
+  let masterQueue: number[];
+  if (Array.isArray(obj.masterQueue) && obj.masterQueue.length === 81) {
+    masterQueue = obj.masterQueue as number[];
+  } else if (Array.isArray(obj.masterSequence) && obj.masterSequence.length === 9) {
+    // Repeat the old 9-item sequence 9 times to form 81
+    const seq = obj.masterSequence as number[];
+    masterQueue = [];
+    for (let i = 0; i < 9; i++) masterQueue.push(...seq);
+  } else {
+    // Absolute fallback: 9 copies of [0..8]
+    masterQueue = [];
+    for (let i = 0; i < 9; i++) masterQueue.push(0, 1, 2, 3, 4, 5, 6, 7, 8);
+  }
 
   return {
     boards,
@@ -94,7 +115,8 @@ export function deserializeState(json: unknown): GameState {
     numPlayers: numPlayers as 2 | 3 | 4,
     currentPlayerIndex,
     gameOver: gameOver as GameState['gameOver'],
-    sequencePosition,
+    queuePosition,
     hasWildcard,
+    masterQueue,
   };
 }

@@ -9,6 +9,13 @@ export type SmallBoard = [CellValue, CellValue, CellValue, CellValue, CellValue,
 /** Global wins: index 0..8 = small board index (row * 3 + col). null = not won, else won by that player */
 export type GlobalWins = (Player | null)[];
 
+/** Board position names for UI labels */
+export const BOARD_NAMES = [
+  'Top-Left', 'Top-Center', 'Top-Right',
+  'Mid-Left', 'Center', 'Mid-Right',
+  'Bot-Left', 'Bot-Center', 'Bot-Right',
+] as const;
+
 /** nextBoard: 0..8 = must play in that small board; null = play anywhere */
 export interface GameState {
   /** 9 small boards, row-major (bigRow * 3 + bigCol) */
@@ -23,10 +30,12 @@ export interface GameState {
   currentPlayerIndex: number;
   /** null = game ongoing, Player = winner, 'draw' = draw */
   gameOver: Player | 'draw' | null;
-  /** Current position in the sequential board progression (0-8) */
-  sequencePosition: number;
+  /** Current index into the masterQueue (0-80). Pauses during wildcard turns. */
+  queuePosition: number;
   /** If true, current player has wildcard choice (any incomplete board) */
   hasWildcard: boolean;
+  /** 81-item queue: 9 concatenated shuffles of [0..8], one per game */
+  masterQueue: number[];
 }
 
 /** Current player symbol for this state */
@@ -71,17 +80,23 @@ export function isBoardPlayable(globalWins: GlobalWins, boardIndex: number): boo
   return true;
 }
 
-/** Sequential board order: 0->1->2->3->4->5->6->7->8 (looping) */
-const BOARD_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-
-/** Get the next board index in the sequence */
-export function getNextSequencePosition(currentPos: number): number {
-  return (currentPos + 1) % 9;
+/** Fisher-Yates shuffle of [0..8] */
+function shuffleNine(): number[] {
+  const arr = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
-/** Get the board index at a given sequence position */
-export function getBoardAtSequence(position: number): number {
-  return BOARD_SEQUENCE[position];
+/** Generate the 81-item master queue: 9 independent shuffles of [0..8] concatenated */
+function generateMasterQueue(): number[] {
+  const queue: number[] = [];
+  for (let s = 0; s < 9; s++) {
+    queue.push(...shuffleNine());
+  }
+  return queue;
 }
 
 function getEmptyCellsInBoard(board: SmallBoard): number[] {
@@ -95,23 +110,25 @@ export function getLegalMoves(state: GameState): { bigRow: number; bigCol: numbe
   if (state.gameOver !== null) return [];
 
   const moves: { bigRow: number; bigCol: number; smallRow: number; smallCol: number }[] = [];
-  const { boards, globalWins, sequencePosition, hasWildcard } = state;
+  const { boards, globalWins, queuePosition, hasWildcard, masterQueue } = state;
 
   let boardIndices: number[];
   
   if (hasWildcard) {
-    // Player has wildcard: can play in any incomplete board
+    // Wildcard: can play in any incomplete board
     boardIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => isBoardPlayable(globalWins, i) && !isSmallBoardFull(boards[i]));
-  } else {
-    // Must follow sequence: play in the board at current sequence position
-    const targetBoard = getBoardAtSequence(sequencePosition);
+  } else if (queuePosition < masterQueue.length) {
+    // Must follow queue: play in the board at current queue position
+    const targetBoard = masterQueue[queuePosition];
     if (isBoardPlayable(globalWins, targetBoard) && !isSmallBoardFull(boards[targetBoard])) {
       boardIndices = [targetBoard];
     } else {
-      // If sequence board is not playable, skip to next in sequence
-      // This handles edge cases but shouldn't happen often
+      // Queue board is unplayable — fallback to any playable board
       boardIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => isBoardPlayable(globalWins, i) && !isSmallBoardFull(boards[i]));
     }
+  } else {
+    // Queue exhausted — free choice
+    boardIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => isBoardPlayable(globalWins, i) && !isSmallBoardFull(boards[i]));
   }
 
   for (const bi of boardIndices) {
@@ -134,17 +151,21 @@ export function createInitialState(numPlayers: 2 | 3 | 4 = 2, randomStart: boole
   // Randomize starting player if requested
   const startingPlayerIndex = randomStart ? Math.floor(Math.random() * numPlayers) : 0;
   
+  // Generate the 81-item master queue for this game
+  const masterQueue = generateMasterQueue();
+  
   return {
     boards: Array(9)
       .fill(null)
       .map(() => [...emptyBoard] as SmallBoard),
     globalWins: Array(9).fill(null),
-    nextBoard: 0, // Start at board 0 in the sequence
+    nextBoard: masterQueue[0],
     numPlayers,
     currentPlayerIndex: startingPlayerIndex,
     gameOver: null,
-    sequencePosition: 0, // Start at position 0 in sequence
-    hasWildcard: false, // No wildcard at start
+    queuePosition: 0,
+    hasWildcard: false,
+    masterQueue,
   };
 }
 
@@ -164,11 +185,11 @@ export function applyMove(
   if (state.globalWins[boardIndex] !== null) return state;
   if (state.gameOver !== null) return state;
 
-  // Enforce sequential rule: must play in correct board unless has wildcard
-  if (!state.hasWildcard) {
-    const expectedBoard = getBoardAtSequence(state.sequencePosition);
+  // Enforce queue rule: must play in correct board unless wildcard
+  if (!state.hasWildcard && state.queuePosition < state.masterQueue.length) {
+    const expectedBoard = state.masterQueue[state.queuePosition];
     if (boardIndex !== expectedBoard) {
-      // Check if expected board is still playable
+      // Only reject if the expected board is still playable
       if (state.globalWins[expectedBoard] === null && !isSmallBoardFull(state.boards[expectedBoard])) {
         return state; // Invalid move
       }
@@ -189,45 +210,58 @@ export function applyMove(
   const globalWinner = checkGlobalWin(nextGlobalWins);
   const nextPlayerIndex = (state.currentPlayerIndex + 1) % state.numPlayers;
 
-  // Determine next sequence position and wildcard status
-  let nextSequencePosition: number;
+  const queue = state.masterQueue;
+  let nextQueuePos: number;
   let nextHasWildcard: boolean;
   let nextBoardIndex: number | null;
 
-  if (boardCompleted) {
-    // Board was completed: next player gets wildcard
-    nextHasWildcard = true;
-    nextSequencePosition = state.sequencePosition; // Keep position, will update after wildcard is used
-    nextBoardIndex = null; // Will be determined by wildcard choice
-  } else if (state.hasWildcard) {
-    // Wildcard was used: resume sequence from chosen board
-    nextHasWildcard = false;
-    // Find the position of the chosen board in the sequence
-    nextSequencePosition = BOARD_SEQUENCE.indexOf(boardIndex);
-    // Advance to next in sequence
-    nextSequencePosition = getNextSequencePosition(nextSequencePosition);
-    nextBoardIndex = getBoardAtSequence(nextSequencePosition);
+  if (state.hasWildcard) {
+    // Wildcard move — queue was PAUSED, position does not advance
+    nextQueuePos = state.queuePosition;
+    if (boardCompleted) {
+      // Chained wildcard: this wildcard also completed a board
+      nextHasWildcard = true;
+      nextBoardIndex = null;
+    } else {
+      // Wildcard done, resume queue from the paused position
+      nextHasWildcard = false;
+      nextBoardIndex = nextQueuePos < queue.length ? queue[nextQueuePos] : null;
+    }
   } else {
-    // Normal sequence progression
-    nextHasWildcard = false;
-    nextSequencePosition = getNextSequencePosition(state.sequencePosition);
-    nextBoardIndex = getBoardAtSequence(nextSequencePosition);
+    // Normal move — advance the queue pointer (this slot was consumed)
+    nextQueuePos = state.queuePosition + 1;
+    if (boardCompleted) {
+      // Board completed: next player gets wildcard, queue pauses at new position
+      nextHasWildcard = true;
+      nextBoardIndex = null;
+    } else {
+      // Normal progression
+      nextHasWildcard = false;
+      nextBoardIndex = nextQueuePos < queue.length ? queue[nextQueuePos] : null;
+    }
   }
 
-  // If next board is not playable, keep advancing sequence until we find one
+  // If next board is unplayable, skip forward in queue until we find one
   while (nextBoardIndex !== null && !nextHasWildcard) {
     if (nextGlobalWins[nextBoardIndex] === null && !isSmallBoardFull(nextBoards[nextBoardIndex])) {
       break; // Found playable board
     }
-    nextSequencePosition = getNextSequencePosition(nextSequencePosition);
-    nextBoardIndex = getBoardAtSequence(nextSequencePosition);
-    
-    // Safety check: if we've looped through all boards, give wildcard
-    const allComplete = nextGlobalWins.every((w, i) => w !== null || isSmallBoardFull(nextBoards[i]));
-    if (allComplete) {
+    // Skip this unplayable slot
+    nextQueuePos++;
+    if (nextQueuePos >= queue.length) {
+      // Queue exhausted — give wildcard
       nextHasWildcard = true;
       nextBoardIndex = null;
       break;
+    }
+    nextBoardIndex = queue[nextQueuePos];
+  }
+
+  // Safety: if queue exhausted and no wildcard yet, allow free choice
+  if (!nextHasWildcard && nextBoardIndex === null) {
+    const anyPlayable = nextGlobalWins.some((w, i) => w === null && !isSmallBoardFull(nextBoards[i]));
+    if (anyPlayable) {
+      nextHasWildcard = true;
     }
   }
 
@@ -238,8 +272,9 @@ export function applyMove(
     numPlayers: state.numPlayers,
     currentPlayerIndex: nextPlayerIndex,
     gameOver: null,
-    sequencePosition: nextSequencePosition,
+    queuePosition: nextQueuePos,
     hasWildcard: nextHasWildcard,
+    masterQueue: state.masterQueue,
   };
 
   // Check for draw
