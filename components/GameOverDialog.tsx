@@ -113,8 +113,8 @@ export default function GameOverDialog({ open, winner, score, onRematch, points,
             </div>
           )}
 
-          {/* Leaderboard submission */}
-          {gameStats && points !== undefined && (
+          {/* Leaderboard submission — only for wins */}
+          {gameStats && points !== undefined && gameStats.result === 'win' && (
             <div className="mt-4">
               {submitted ? (
                 <div className="text-center">

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import GameBoard from '@/components/GameBoard';
 import GameOverDialog from '@/components/GameOverDialog';
 import GameMenu from '@/components/GameMenu';
+import RulesModal from '@/components/RulesModal';
 import {
   createInitialState,
   applyMove,
@@ -45,6 +46,71 @@ function parseModeAndPlayers(searchParams: ReturnType<typeof useSearchParams>): 
   return { mode: 'multi', numPlayers: 2, difficulty: 5, gameMode: 'two', isHellMode: false };
 }
 
+/** Tailwind color class for a player symbol */
+function symbolColorClass(sym: Player): string {
+  switch (sym) {
+    case 'X': return 'text-violet-600 dark:text-violet-400';
+    case 'O': return 'text-amber-500 dark:text-amber-400';
+    case '△': return 'text-emerald-600 dark:text-emerald-400';
+    case '□': return 'text-rose-500 dark:text-rose-400';
+    default: return 'text-zinc-600 dark:text-zinc-400';
+  }
+}
+
+/** Renders a dynamically colored status identity line */
+function StatusIdentity({
+  isSinglePlayer,
+  playerAssignment,
+  isHellMode,
+  difficulty,
+  symbols,
+}: {
+  isSinglePlayer: boolean;
+  playerAssignment: { userPlayer: string; cpuPlayer: string } | null;
+  isHellMode: boolean;
+  difficulty: number;
+  symbols: readonly Player[];
+}) {
+  if (isSinglePlayer && playerAssignment) {
+    const userSym = playerAssignment.userPlayer as Player;
+    const cpuSym = playerAssignment.cpuPlayer as Player;
+    if (isHellMode) {
+      return (
+        <span className="flex items-center gap-1 flex-wrap justify-center">
+          <span className="text-red-600 dark:text-red-400 font-bold">HELL MODE</span>
+          <span className="text-zinc-400">·</span>
+          <span className="text-zinc-500 dark:text-zinc-400">You are</span>
+          <span className={`font-bold ${symbolColorClass(userSym)}`}>{userSym}</span>
+          <span className="text-zinc-400">·</span>
+          <span className="text-zinc-500 dark:text-zinc-400">Level 10</span>
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 flex-wrap justify-center">
+        <span className="text-zinc-500 dark:text-zinc-400">You are</span>
+        <span className={`font-bold ${symbolColorClass(userSym)}`}>{userSym}</span>
+        <span className="text-zinc-400">·</span>
+        <span className="text-zinc-500 dark:text-zinc-400">CPU is</span>
+        <span className={`font-bold ${symbolColorClass(cpuSym)}`}>{cpuSym}</span>
+        <span className="text-zinc-400">·</span>
+        <span className="text-zinc-500 dark:text-zinc-400">Level {difficulty}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 flex-wrap justify-center">
+      {symbols.map((sym, i) => (
+        <span key={sym} className="flex items-center gap-1">
+          {i > 0 && <span className="text-zinc-400">·</span>}
+          <span className={`font-bold ${symbolColorClass(sym)}`}>{sym}</span>
+        </span>
+      ))}
+      <span className="text-zinc-500 dark:text-zinc-400 ml-1">(same device)</span>
+    </span>
+  );
+}
+
 function GamePageContent() {
   const searchParams = useSearchParams();
   const { mode, numPlayers, difficulty, gameMode, isHellMode } = parseModeAndPlayers(searchParams);
@@ -52,7 +118,6 @@ function GamePageContent() {
   // Randomize player assignments at start
   const [playerAssignment] = useState(() => {
     if (mode === 'single') {
-      // Randomly assign user as X or O
       const isUserX = Math.random() < 0.5;
       return {
         userPlayer: isUserX ? 'X' : 'O',
@@ -67,6 +132,7 @@ function GamePageContent() {
   const [state, setState] = useState<GameState>(() => createInitialState(numPlayers, true));
   const [cpuThinking, setCpuThinking] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   // Use Web Worker for high-level AI (Levels 7-10)
   const { getCPUMove: getWorkerMove } = useCPUWorker();
@@ -145,7 +211,8 @@ function GamePageContent() {
       if (mode === 'single' && playerAssignment && state.currentPlayerIndex !== playerAssignment.userIndex) return;
       
       const next = applyMove(state, bigRow, bigCol, smallRow, smallCol);
-      if (next === state) return; // Move was invalid (wrong board, occupied cell, etc.)
+      if (next === state) return; // Move was invalid
+
       setState(next);
 
       if (mode === 'single') {
@@ -226,7 +293,6 @@ function GamePageContent() {
 
       if (remaining <= 0) {
         clearInterval(interval);
-        // Time's up: make a random legal move for the human
         const currentState = stateRef.current;
         if (currentState.gameOver !== null || currentState.currentPlayerIndex !== playerAssignment.userIndex) return;
         const moves = getLegalMoves(currentState);
@@ -253,7 +319,6 @@ function GamePageContent() {
     setElapsed(0);
     setTimeLeft(HELL_TURN_SECONDS);
 
-    // If CPU goes first in the new game, trigger its move
     if (playerAssignment && newState.currentPlayerIndex === playerAssignment.cpuIndex) {
       setCpuThinking(true);
     } else {
@@ -261,27 +326,11 @@ function GamePageContent() {
     }
   }, [numPlayers, playerAssignment]);
 
-  const handleLoadGame = useCallback(
-    (loaded: { state: GameState; mode: 'single' | 'two' | 'three' | 'four' | 'hell'; difficulty: number | null }) => {
-      setState(loaded.state);
-      setCpuThinking(false);
-      setPlayerMoves(0);
-      setStartTime(Date.now());
-      setElapsed(0);
-    },
-    []
-  );
-
   const gameOver = state.gameOver !== null;
   const winner = state.gameOver === 'draw' ? 'draw' : state.gameOver;
   const hasFilledBoards = score.symbols.some((s) => score.counts[s] > 0) || score.tied > 0;
 
   const isSinglePlayer = mode === 'single';
-  const statusLine = isSinglePlayer && playerAssignment
-    ? isHellMode
-      ? `HELL MODE · You are ${playerAssignment.userPlayer} · Level 10`
-      : `You are ${playerAssignment.userPlayer} · CPU is ${playerAssignment.cpuPlayer} · Level ${difficulty}`
-    : score.symbols.join(' · ') + ' (same device)';
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
@@ -317,19 +366,41 @@ function GamePageContent() {
               )}
             </p>
           ) : (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">{statusLine}</p>
+            <p className="text-sm">
+              <StatusIdentity
+                isSinglePlayer={isSinglePlayer}
+                playerAssignment={playerAssignment}
+                isHellMode={isHellMode}
+                difficulty={difficulty}
+                symbols={score.symbols}
+              />
+            </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setMenuOpen(true)}
-          aria-label="Open menu"
-          className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 ml-1 transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
-            <path fillRule="evenodd" d="M3 6.75A.75.75 0 013.75 6h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 6.75zM3 12a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 12zm0 5.25a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
-          </svg>
-        </button>
+
+        {/* Icon buttons: How to Play + Menu */}
+        <div className="flex items-center gap-1 ml-1">
+          <button
+            type="button"
+            onClick={() => setRulesOpen(true)}
+            aria-label="How to Play"
+            className="p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
+              <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm11.378-3.917c-.89-.777-2.366-.777-3.255 0a.75.75 0 01-.988-1.129c1.454-1.272 3.776-1.272 5.23 0 1.513 1.324 1.513 3.220 0 4.544-.676.593-1.562.890-2.43.980V14.25a.75.75 0 01-1.5 0v-1.5a.75.75 0 01.75-.75c.826 0 1.607-.28 2.13-.727.623-.545.623-1.393 0-1.938zM12 17.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Open menu"
+            className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
+              <path fillRule="evenodd" d="M3 6.75A.75.75 0 013.75 6h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 6.75zM3 12a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 12zm0 5.25a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Score / timer bar for single player */}
@@ -398,23 +469,12 @@ function GamePageContent() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onRestart={handleRematch}
-        state={state}
-        gameMode={gameMode}
-        difficulty={difficulty}
-        onLoadGame={handleLoadGame}
       />
+
+      {/* How to Play modal */}
+      <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
     </article>
   );
-}
-
-function symbolColorClass(sym: Player): string {
-  switch (sym) {
-    case 'X': return 'text-violet-600 dark:text-violet-400';
-    case 'O': return 'text-amber-500 dark:text-amber-400';
-    case '△': return 'text-emerald-600 dark:text-emerald-400';
-    case '□': return 'text-rose-500 dark:text-rose-400';
-    default: return 'text-zinc-600 dark:text-zinc-400';
-  }
 }
 
 export default function GamePage() {

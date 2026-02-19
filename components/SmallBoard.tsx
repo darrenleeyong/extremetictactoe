@@ -10,18 +10,20 @@ interface SmallBoardProps {
   isTied: boolean;
   disabled: boolean;
   isTarget: boolean;
+  isNextUp?: boolean;
   onCellClick: (bigRow: number, bigCol: number, smallRow: number, smallCol: number) => void;
   bigRow: number;
   bigCol: number;
 }
 
-function boardBgClass(wonBy: CellValue, isTied: boolean, isTarget: boolean): string {
+function boardBgClass(wonBy: CellValue, isTied: boolean, isTarget: boolean, isNextUp: boolean): string {
   if (wonBy === 'X') return 'bg-violet-500/20 dark:bg-violet-500/25 border-violet-500/50';
   if (wonBy === 'O') return 'bg-amber-500/20 dark:bg-amber-500/25 border-amber-500/50';
   if (wonBy === '△') return 'bg-emerald-500/20 dark:bg-emerald-500/25 border-emerald-500/50';
   if (wonBy === '□') return 'bg-rose-500/20 dark:bg-rose-500/25 border-rose-500/50';
   if (isTied) return 'bg-zinc-200/80 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600';
-  if (isTarget) return 'bg-violet-500/10 dark:bg-violet-500/15 border-violet-500 dark:border-violet-400';
+  if (isTarget) return 'bg-amber-500/10 dark:bg-amber-500/15 border-amber-500 dark:border-amber-400';
+  if (isNextUp) return 'bg-violet-500/5 dark:bg-violet-500/10 border-violet-400/60 dark:border-violet-500/60';
   return 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700';
 }
 
@@ -40,11 +42,12 @@ export default function SmallBoard({
   isTied,
   disabled,
   isTarget,
+  isNextUp = false,
   onCellClick,
   bigRow,
   bigCol,
 }: SmallBoardProps) {
-  const bgClass = boardBgClass(wonBy, isTied, isTarget);
+  const bgClass = boardBgClass(wonBy, isTied, isTarget, isNextUp);
 
   return (
     <div className="relative">
@@ -59,7 +62,8 @@ export default function SmallBoard({
         className={`
           grid grid-cols-3 gap-0.5 aspect-square p-0.5 rounded-lg border-2 ${bgClass}
           ${disabled ? 'opacity-90' : ''}
-          ${isTarget ? 'ring-2 ring-violet-500 dark:ring-violet-400 ring-offset-1' : ''}
+          ${isTarget ? 'ring-2 ring-amber-500 dark:ring-amber-400 ring-offset-1' : ''}
+          ${isNextUp ? 'ring-2 ring-violet-400/70 dark:ring-violet-500/70 ring-offset-1 animate-pulse' : ''}
         `}
       >
       {board.map((cell, i) => {
